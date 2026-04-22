@@ -11,7 +11,6 @@
 *{box-sizing:border-box;margin:0;padding:0;}
 html{scroll-behavior:smooth;}
 body{background:var(--bg);color:var(--text);font-family:'Syne',sans-serif;font-size:14px;min-height:100vh;}
-.mono{font-family:'DM Mono',monospace;}
 .hdr{position:sticky;top:0;z-index:100;background:rgba(12,12,14,0.85);backdrop-filter:blur(16px);border-bottom:1px solid var(--border);padding:0 32px;height:58px;display:flex;align-items:center;justify-content:space-between;}
 .hdr-l{display:flex;align-items:center;gap:12px;}
 .logomark{width:30px;height:30px;border-radius:8px;background:var(--green);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;color:#000;letter-spacing:-0.5px;flex-shrink:0;}
@@ -68,6 +67,9 @@ tbody tr:hover td{background:var(--s2);}
 .blate{background:var(--blue-bg);color:var(--blue);border:1px solid rgba(91,164,245,.2);}
 .bbos{background:var(--purple-bg);color:var(--purple);border:1px solid rgba(157,127,244,.2);}
 .bvp{background:var(--coral-bg);color:var(--coral);border:1px solid rgba(255,124,92,.2);}
+.bbuy{background:var(--green-bg);color:var(--green);border:1px solid var(--green-bd);}
+.bsell{background:var(--red-bg);color:var(--red);border:1px solid var(--red-bd);}
+.btf{background:var(--purple-bg);color:var(--purple);border:1px solid rgba(157,127,244,.2);}
 .ppos{color:var(--green);font-family:'DM Mono',monospace;font-weight:500;}
 .pneg{color:var(--red);font-family:'DM Mono',monospace;font-weight:500;}
 .mono-td{font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);}
@@ -84,7 +86,7 @@ tbody tr:hover td{background:var(--s2);}
     <div class="logomark">M</div>
     <div>
       <div class="hdr-title">MYM Trading Dashboard</div>
-      <div class="hdr-sub mono">NY SESSION · 9:30–10:30AM · 2 CONTRACTS</div>
+      <div class="hdr-sub">NY SESSION · 9:30–10:30AM · 2 CONTRACTS</div>
     </div>
   </div>
   <div class="hdr-r">
@@ -102,10 +104,13 @@ tbody tr:hover td{background:var(--s2);}
     <span class="pill" data-f="late">Late · 10:15–10:30</span>
     <span class="pill" data-f="bos">Break of Structure</span>
     <span class="pill" data-f="vp">Volume Pullback</span>
+    <span class="pill" data-f="buy">Buy Volume</span>
+    <span class="pill" data-f="sell">Sell Volume</span>
     <span class="pill" data-f="long">Longs</span>
     <span class="pill" data-f="short">Shorts</span>
     <span class="pill" data-f="win">Wins</span>
     <span class="pill" data-f="loss">Losses</span>
+    <span class="pill" data-f="1min">1 Min</span>
   </div>
   <div class="metrics">
     <div class="metric"><div class="mlbl">Net PnL</div><div class="mval g" id="mPnl">—</div></div>
@@ -138,8 +143,8 @@ tbody tr:hover td{background:var(--s2);}
       <div style="position:relative;height:150px;"><canvas id="cTod" role="img" aria-label="TOD PnL">TOD</canvas></div>
     </div>
     <div class="cc">
-      <div class="cc-lbl">Duration distribution</div>
-      <div style="position:relative;height:150px;"><canvas id="cDur" role="img" aria-label="Duration">Duration</canvas></div>
+      <div class="cc-lbl">PnL by volume</div>
+      <div style="position:relative;height:150px;"><canvas id="cVol" role="img" aria-label="Volume PnL">Volume</canvas></div>
     </div>
     <div class="cc">
       <div class="cc-lbl">Long vs Short PnL</div>
@@ -153,8 +158,8 @@ tbody tr:hover td{background:var(--s2);}
     </div>
     <div class="tbl-scroll">
       <table>
-        <thead><tr><th>Date</th><th>Entry</th><th>Exit</th><th>Dur</th><th>Time</th><th>Setup</th><th>Conf 1</th><th>Conf 2</th><th>Conf 3</th><th>Dir</th><th>Entry $</th><th>Exit $</th><th>Pts</th><th>Net PnL</th><th>Result</th><th>Notes</th></tr></thead>
-        <tbody id="tbody"><tr><td colspan="16" class="loading"><span class="spin"></span>Loading from Notion...</td></tr></tbody>
+        <thead><tr><th>Date</th><th>Entry</th><th>Exit</th><th>Dur</th><th>Timeframe</th><th>Time</th><th>Setup</th><th>Volume</th><th>Conf 2</th><th>Conf 3</th><th>Dir</th><th>Entry $</th><th>Exit $</th><th>Pts</th><th>Net PnL</th><th>Result</th><th>Notes</th></tr></thead>
+        <tbody id="tbody"><tr><td colspan="17" class="loading"><span class="spin"></span>Loading from Notion...</td></tr></tbody>
       </table>
     </div>
   </div>
@@ -187,26 +192,36 @@ function parse(page){
   const p=page.properties||{};
   const net=parseFloat(g(p,"Net PnL ($)","Net PnL","Net $","NetPnL","net"))||0;
   const dur=parseFloat(g(p,"Duration (mins)","Duration","Dur","duration"))||0;
-  const todR=(g(p,"Time of Day","TimeofDay","tod","time")||"").toLowerCase();
+  const todR=(g(p,"Time of Day","TimeofDay","tod")||"").toLowerCase();
   const setR=(g(p,"Setup Type","Setup","SetupType")||"").toLowerCase();
   const dirR=(g(p,"Direction","Dir","direction")||"").toLowerCase();
   const resR=(g(p,"Result","result","outcome")||"").toLowerCase();
+  const volR=(g(p,"Volume","Volume Direction","VolumeDirection")||"").toLowerCase();
+  const tf=(g(p,"Timeframe","timeframe","tf")||"");
+
   let tod="mid";
   if(todR.includes("open"))tod="open";
   else if(todR.includes("late"))tod="late";
+
   let setup="bos";
   if(setR.includes("volume")||setR.includes("pullback")||setR.includes("vp"))setup="vp";
+
   let result=net>0?"win":net<0?"loss":"be";
   if(resR.includes("win"))result="win";
   else if(resR.includes("loss"))result="loss";
   else if(resR.includes("be")||resR.includes("even"))result="be";
+
+  let vol="";
+  if(volR.includes("buy"))vol="buy";
+  else if(volR.includes("sell"))vol="sell";
+
   return{
     date:g(p,"Trade Date","Date","TradeDate")||"",
     entry:g(p,"Entry Time","Entry","EntryTime")||"",
     exit:g(p,"Exit Time","Exit","ExitTime")||"",
-    dur,tod,setup,
+    dur,tod,setup,tf,vol,
+    volLabel:g(p,"Volume","Volume Direction","VolumeDirection")||"",
     dir:dirR.includes("short")?"short":"long",
-    c1:g(p,"Confluence 1","Confluence1","conf1")||"",
     c2:g(p,"Confluence 2","Confluence2","conf2")||"",
     c3:g(p,"Confluence 3","Confluence3","conf3")||"",
     entryP:parseFloat(g(p,"Entry Price","EntryPrice","entry price"))||null,
@@ -222,11 +237,7 @@ async function fetchAll(){
   while(more){
     const body={page_size:100,sorts:[{timestamp:"created_time",direction:"ascending"}]};
     if(cursor)body.start_cursor=cursor;
-    const r=await fetch(API,{
-      method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body:JSON.stringify(body)
-    });
+    const r=await fetch(API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
     if(!r.ok){const e=await r.json();throw new Error(e.message||"HTTP "+r.status);}
     const d=await r.json();
     pages=pages.concat(d.results||[]);
@@ -241,6 +252,8 @@ function filt(f){
   if(["open","mid","late"].includes(f))return all.filter(t=>t.tod===f);
   if(["bos","vp"].includes(f))return all.filter(t=>t.setup===f);
   if(["long","short"].includes(f))return all.filter(t=>t.dir===f);
+  if(["buy","sell"].includes(f))return all.filter(t=>t.vol===f);
+  if(f==="1min")return all.filter(t=>t.tf.toLowerCase().includes("1"));
   return all;
 }
 
@@ -271,6 +284,7 @@ function charts(data){
   const xl=data.map((t,i)=>t.date||""+(i+1));
   if(CH.pnl)CH.pnl.destroy();
   CH.pnl=new Chart(document.getElementById("cPnl"),{type:"line",data:{labels:xl,datasets:[{data:cum,borderColor:"#00e587",backgroundColor:"rgba(0,229,135,0.06)",fill:true,tension:0.35,borderWidth:2,pointRadius:4,pointBorderColor:"transparent",pointBackgroundColor:cum.map(v=>v>=0?"#00e587":"#ff5252")}]},options:{...CD,scales:sc(v=>"$"+v)}});
+
   const w=data.filter(t=>t.result==="win").length;
   const l=data.filter(t=>t.result==="loss").length;
   const b=data.filter(t=>t.result==="be").length;
@@ -278,18 +292,22 @@ function charts(data){
   CH.pie=new Chart(document.getElementById("cPie"),{type:"doughnut",data:{datasets:[{data:[w,l,b],backgroundColor:["#00e587","#ff5252","#ffb347"],borderWidth:0}]},options:{...CD,cutout:"65%"}});
   const tot=w+l+b||1;
   document.getElementById("pieLeg").innerHTML=[["#00e587","Win",w],["#ff5252","Loss",l],["#ffb347","BE",b]].filter(r=>r[2]>0).map(([c,lb,n])=>`<span class="leg-item"><span class="leg-dot" style="background:${c}"></span>${lb} ${Math.round(n/tot*100)}%</span>`).join("");
+
   const bos=Math.round(data.filter(t=>t.setup==="bos").reduce((s,t)=>s+t.net,0));
   const vp=Math.round(data.filter(t=>t.setup==="vp").reduce((s,t)=>s+t.net,0));
   if(CH.setup)CH.setup.destroy();
-  CH.setup=new Chart(document.getElementById("cSetup"),{type:"bar",data:{labels:["Break of Structure","Volume Pullback"],datasets:[{data:[bos,vp],backgroundColor:["rgba(157,127,244,.65)","rgba(255,124,92,.65)"],borderRadius:6,borderSkipped:false}]},options:{...CD,scales:sc(v=>"$"+v)}});
+  CH.setup=new Chart(document.getElementById("cSetup"),{type:"bar",data:{labels:["Break of Structure","Vol Pullback"],datasets:[{data:[bos,vp],backgroundColor:["rgba(157,127,244,.65)","rgba(255,124,92,.65)"],borderRadius:6,borderSkipped:false}]},options:{...CD,scales:sc(v=>"$"+v)}});
+
   const tod={open:0,mid:0,late:0};
   data.forEach(t=>tod[t.tod]=(tod[t.tod]||0)+t.net);
   if(CH.tod)CH.tod.destroy();
   CH.tod=new Chart(document.getElementById("cTod"),{type:"bar",data:{labels:["Open","Mid","Late"],datasets:[{data:[Math.round(tod.open),Math.round(tod.mid),Math.round(tod.late)],backgroundColor:["rgba(255,179,71,.65)","rgba(0,229,135,.65)","rgba(91,164,245,.65)"],borderRadius:6,borderSkipped:false}]},options:{...CD,scales:sc(v=>"$"+v)}});
-  const db={"0-10m":0,"11-20m":0,"21-30m":0,"30m+":0};
-  data.forEach(t=>{if(t.dur<=10)db["0-10m"]++;else if(t.dur<=20)db["11-20m"]++;else if(t.dur<=30)db["21-30m"]++;else db["30m+"]++;});
-  if(CH.dur)CH.dur.destroy();
-  CH.dur=new Chart(document.getElementById("cDur"),{type:"bar",data:{labels:Object.keys(db),datasets:[{data:Object.values(db),backgroundColor:"rgba(91,164,245,.65)",borderRadius:6,borderSkipped:false}]},options:{...CD,scales:sc()}});
+
+  const buyNet=Math.round(data.filter(t=>t.vol==="buy").reduce((s,t)=>s+t.net,0));
+  const sellNet=Math.round(data.filter(t=>t.vol==="sell").reduce((s,t)=>s+t.net,0));
+  if(CH.vol)CH.vol.destroy();
+  CH.vol=new Chart(document.getElementById("cVol"),{type:"bar",data:{labels:["Buy Volume","Sell Volume"],datasets:[{data:[buyNet,sellNet],backgroundColor:["rgba(0,229,135,.65)","rgba(255,82,82,.65)"],borderRadius:6,borderSkipped:false}]},options:{...CD,scales:sc(v=>"$"+v)}});
+
   const ln=Math.round(data.filter(t=>t.dir==="long").reduce((s,t)=>s+t.net,0));
   const sn=Math.round(data.filter(t=>t.dir==="short").reduce((s,t)=>s+t.net,0));
   if(CH.dir)CH.dir.destroy();
@@ -299,8 +317,26 @@ function charts(data){
 function table(data){
   document.getElementById("tblCount").textContent=data.length+" trade"+(data.length!==1?"s":"");
   const tb=document.getElementById("tbody");
-  if(!data.length){tb.innerHTML=`<tr><td colspan="16" class="empty">No trades match this filter.<br><span style="font-size:11px;font-family:'DM Mono',monospace;">Log trades in Notion and hit Refresh.</span></td></tr>`;return;}
-  tb.innerHTML=data.map(t=>`<tr><td class="mono-td">${t.date||"—"}</td><td class="mono-td">${t.entry||"—"}</td><td class="mono-td">${t.exit||"—"}</td><td class="mono-td">${t.dur?t.dur+"m":"—"}</td><td><span class="badge b${t.tod}">${t.tod==="open"?"Open":t.tod==="mid"?"Mid":"Late"}</span></td><td><span class="badge b${t.setup}">${t.setup==="bos"?"BOS":"Vol Pull"}</span></td><td class="mono-td">${t.c1||"—"}</td><td class="mono-td">${t.c2||"—"}</td><td class="mono-td">${t.c3||"—"}</td><td><span class="badge b${t.dir}">${t.dir==="long"?"Long":"Short"}</span></td><td class="mono-td">${t.entryP??"—"}</td><td class="mono-td">${t.exitP??"—"}</td><td class="mono-td">${t.points??"—"}</td><td class="${t.net>=0?"ppos":"pneg"}">${t.net>=0?"+$":"-$"}${Math.abs(Math.round(t.net))}</td><td><span class="badge b${t.result}">${t.result==="win"?"Win":t.result==="loss"?"Loss":"BE"}</span></td><td class="mono-td" style="max-width:160px;overflow:hidden;text-overflow:ellipsis;color:#5a5a62;" title="${t.notes}">${t.notes||"—"}</td></tr>`).join("");
+  if(!data.length){tb.innerHTML=`<tr><td colspan="17" class="empty">No trades match this filter.<br><span style="font-size:11px;font-family:'DM Mono',monospace;">Log trades in Notion and hit Refresh.</span></td></tr>`;return;}
+  tb.innerHTML=data.map(t=>`<tr>
+    <td class="mono-td">${t.date||"—"}</td>
+    <td class="mono-td">${t.entry||"—"}</td>
+    <td class="mono-td">${t.exit||"—"}</td>
+    <td class="mono-td">${t.dur?t.dur+"m":"—"}</td>
+    <td><span class="badge btf">${t.tf||"—"}</span></td>
+    <td><span class="badge b${t.tod}">${t.tod==="open"?"Open":t.tod==="mid"?"Mid":"Late"}</span></td>
+    <td><span class="badge b${t.setup}">${t.setup==="bos"?"BOS":"Vol Pull"}</span></td>
+    <td><span class="badge b${t.vol==="buy"?"buy":t.vol==="sell"?"sell":""}">${t.volLabel||"—"}</span></td>
+    <td class="mono-td">${t.c2||"—"}</td>
+    <td class="mono-td">${t.c3||"—"}</td>
+    <td><span class="badge b${t.dir}">${t.dir==="long"?"Long":"Short"}</span></td>
+    <td class="mono-td">${t.entryP??"—"}</td>
+    <td class="mono-td">${t.exitP??"—"}</td>
+    <td class="mono-td">${t.points??"—"}</td>
+    <td class="${t.net>=0?"ppos":"pneg"}">${t.net>=0?"+$":"-$"}${Math.abs(Math.round(t.net))}</td>
+    <td><span class="badge b${t.result}">${t.result==="win"?"Win":t.result==="loss"?"Loss":"BE"}</span></td>
+    <td class="mono-td" style="max-width:160px;overflow:hidden;text-overflow:ellipsis;color:#5a5a62;" title="${t.notes}">${t.notes||"—"}</td>
+  </tr>`).join("");
 }
 
 function apply(f){
@@ -328,7 +364,7 @@ async function loadData(){
     document.getElementById("errBox").style.display="block";
     document.getElementById("errMsg").textContent=e.message;
     document.getElementById("statusLine").innerHTML=`<span style="color:var(--red)">●</span>&nbsp;&nbsp;Connection failed`;
-    document.getElementById("tbody").innerHTML=`<tr><td colspan="16" class="empty">Could not load data.<br><span style="font-size:11px;font-family:'DM Mono',monospace;">Make sure your Notion integration is connected.</span></td></tr>`;
+    document.getElementById("tbody").innerHTML=`<tr><td colspan="17" class="empty">Could not load data.<br><span style="font-size:11px;font-family:'DM Mono',monospace;">Make sure your Notion integration is connected.</span></td></tr>`;
   }
   btn.disabled=false;btn.textContent="↻ Refresh";
 }
@@ -337,4 +373,3 @@ loadData();
 </script>
 </body>
 </html>
-
